@@ -55,10 +55,17 @@ jobs:
           docker push $REGISTRY/$IMAGE_NAME:${IMAGE_TAG}
           docker push $REGISTRY/$IMAGE_NAME:latest
 
-      - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@v3
+      - name: Azure Login
+        uses: azure/login@v2
         with:
-          app-name: Tutorial
           publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
-          is-linux: true
-          images: ghcr.io/jcbritto/tutorial_azure_integration:${{ github.sha }}
+
+      - name: Update Azure Web App container
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az webapp config container set \
+              --name Tutorial \
+              --resource-group Kyte-Rg \
+              --container-image-name ghcr.io/jcbritto/tutorial_azure_integration:${{ github.sha }}
+            az webapp restart --name Tutorial --resource-group Kyte-Rg

@@ -55,39 +55,20 @@ jobs:
           docker push $REGISTRY/$IMAGE_NAME:${IMAGE_TAG}
           docker push $REGISTRY/$IMAGE_NAME:latest
 
-      - name: Restart Azure Web App
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Update Azure Web App container
         env:
-          AZURE_PUBLISH_PROFILE: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          GHCR_DEPLOY_TOKEN: ${{ secrets.GHCR_DEPLOY_TOKEN }}
         run: |
-          python - <<'PY'
-          import base64
-          import os
-          import urllib.request
-          import xml.etree.ElementTree as ET
-
-          profile_xml = os.environ["AZURE_PUBLISH_PROFILE"]
-          root = ET.fromstring(profile_xml)
-
-          msdeploy = next(
-              (p for p in root.findall("publishProfile") if p.get("publishMethod") == "MSDeploy"),
-              None,
-          )
-          if msdeploy is None:
-              raise SystemExit("MSDeploy publish profile not found")
-
-          username = msdeploy.get("userName")
-          password = msdeploy.get("userPWD")
-          publish_url = msdeploy.get("publishUrl").split(":")[0]
-          auth = base64.b64encode(f"{username}:{password}".encode()).decode()
-
-          for action in ("stop", "start"):
-              req = urllib.request.Request(
-                  f"https://{publish_url}/api/app/{action}",
-                  method="POST",
-                  headers={"Authorization": f"Basic {auth}"},
-              )
-              with urllib.request.urlopen(req) as response:
-                  if response.status >= 400:
-                      raise SystemExit(f"Failed to {action} app: {response.status}")
-
-          PY
+          az webapp config container set \
+            --name Tutorial \
+            --resource-group Kyte-Rg \
+            --container-image-name ghcr.io/jcbritto/tutorial_azure_integration:${{ github.sha }} \
+            --container-registry-url https://ghcr.io \
+            --container-registry-user jcbritto \
+            --container-registry-password "$GHCR_DEPLOY_TOKEN"
+          az webapp restart --name Tutorial --resource-group Kyte-Rg
